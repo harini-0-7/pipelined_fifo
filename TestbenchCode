@@ -1,0 +1,359 @@
+`timescale 1ns/1ps
+module fifo_tb;
+    reg clk;
+    reg reset;
+    reg wr_en;
+    reg rd_en;
+    reg [7:0] wr_data;
+    wire [7:0] rd_data;
+    wire full;
+    wire empty;
+    wire overflow;
+    wire underflow;
+    integer i;
+    reg [7:0] random_data [0:7];
+    // =========================================================
+    // DUT
+    // =========================================================
+    fifo_baseline #(
+        .DATA_WIDTH(8),
+
+        .DEPTH(16)
+    ) DUT (
+        .clk(clk),
+        .reset(reset),
+        .wr_en(wr_en),
+        .wr_data(wr_data),
+        .rd_en(rd_en),
+        .rd_data(rd_data),
+        .full(full),
+        .empty(empty),
+        .overflow(overflow),
+        .underflow(underflow)
+    );
+    // =========================================================
+    // CLOCK
+    // 10 ns period = 100 MHz
+    // =========================================================
+    initial begin
+        clk = 0;
+        forever #5 clk = ~clk;
+    end
+    // =========================================================
+    // WRITE TASK
+    // =========================================================
+    task fifo_write;
+        input [7:0] data;
+        begin
+
+            @(negedge clk);
+            wr_en = 1;
+            rd_en = 0;
+            wr_data = data;
+            @(posedge clk);
+            #1;
+            wr_en = 0;
+        end
+    endtask
+    // =========================================================
+    // READ TASK
+    // =========================================================
+    task fifo_read;
+        input [7:0] expected_data;
+        begin
+            @(negedge clk);
+            wr_en = 0;
+            rd_en = 1;
+            @(posedge clk);
+            #1;
+            if (rd_data == expected_data) begin
+                $display(
+                    &quot;READ PASS : Expected = %h, Received = %h&quot;,
+                    expected_data,
+                    rd_data
+                );
+
+end
+            else begin
+                $display(
+                    &quot;READ FAIL : Expected = %h, Received = %h&quot;,
+                    expected_data,
+                    rd_data
+                );
+            end
+            rd_en = 0;
+        end
+    endtask
+    // =========================================================
+    // MAIN TEST
+    // =========================================================
+    initial begin
+        // -----------------------------------------------------
+        // INITIAL VALUES
+        // -----------------------------------------------------
+        reset = 1;
+        wr_en = 0;
+        rd_en = 0;
+        wr_data = 0;
+        // =====================================================
+        // TEST 1 : RESET
+        // =====================================================
+        $display(&quot;&quot;);
+        $display(&quot;==============================================&quot;);
+
+        $display(&quot;TEST 1 : RESET&quot;);
+        $display(&quot;==============================================&quot;);
+        #20;
+        if ((empty == 1) &amp;&amp; (full == 0)) begin
+            $display(&quot;RESET PASS&quot;);
+        end
+        else begin
+            $display(&quot;RESET FAIL&quot;);
+        end
+        reset = 0;
+        // =====================================================
+        // TEST 2 : NORMAL WRITE
+        // =====================================================
+        $display(&quot;&quot;);
+        $display(&quot;==============================================&quot;);
+        $display(&quot;TEST 2 : NORMAL WRITE&quot;);
+        $display(&quot;==============================================&quot;);
+        fifo_write(8&#39;hA1);
+        fifo_write(8&#39;hB2);
+        fifo_write(8&#39;hC3);
+        fifo_write(8&#39;hD4);
+        $display(&quot;NORMAL WRITE COMPLETED&quot;);
+        // =====================================================
+        // TEST 3 : NORMAL READ + FIFO ORDER
+        // =====================================================
+        $display(&quot;&quot;);
+        $display(&quot;==============================================&quot;);
+
+        $display(&quot;TEST 3 : NORMAL READ / FIFO ORDER&quot;);
+        $display(&quot;==============================================&quot;);
+        fifo_read(8&#39;hA1);
+        fifo_read(8&#39;hB2);
+        fifo_read(8&#39;hC3);
+        fifo_read(8&#39;hD4);
+        // =====================================================
+        // TEST 4 : EMPTY
+        // =====================================================
+        $display(&quot;&quot;);
+        $display(&quot;==============================================&quot;);
+        $display(&quot;TEST 4 : EMPTY&quot;);
+        $display(&quot;==============================================&quot;);
+        @(negedge clk);
+        if (empty == 1) begin
+            $display(&quot;EMPTY PASS&quot;);
+        end
+        else begin
+            $display(&quot;EMPTY FAIL&quot;);
+        end
+        // =====================================================
+        // TEST 5 : UNDERFLOW
+        // =====================================================
+
+        $display(&quot;&quot;);
+        $display(&quot;==============================================&quot;);
+        $display(&quot;TEST 5 : UNDERFLOW&quot;);
+
+        $display(&quot;==============================================&quot;);
+        rd_en = 1;
+        @(posedge clk);
+        #1;
+        if (underflow == 1) begin
+            $display(&quot;UNDERFLOW PASS&quot;);
+        end
+        else begin
+            $display(&quot;UNDERFLOW FAIL&quot;);
+        end
+        @(negedge clk);
+        rd_en = 0;
+        // =====================================================
+        // TEST 6 : FILL FIFO
+        // =====================================================
+        $display(&quot;&quot;);
+        $display(&quot;==============================================&quot;);
+        $display(&quot;TEST 6 : FULL&quot;);
+        $display(&quot;==============================================&quot;);
+        fifo_write(8&#39;h01);
+        fifo_write(8&#39;h02);
+        fifo_write(8&#39;h03);
+        fifo_write(8&#39;h04);
+        fifo_write(8&#39;h05);
+        fifo_write(8&#39;h06);
+        fifo_write(8&#39;h07);
+        fifo_write(8&#39;h08);
+
+        fifo_write(8&#39;h09);
+        fifo_write(8&#39;h0A);
+        fifo_write(8&#39;h0B);
+        fifo_write(8&#39;h0C);
+        fifo_write(8&#39;h0D);
+        fifo_write(8&#39;h0E);
+        fifo_write(8&#39;h0F);
+        fifo_write(8&#39;h10);
+        @(negedge clk);
+        if (full == 1) begin
+            $display(&quot;FULL PASS&quot;);
+        end
+        else begin
+            $display(&quot;FULL FAIL&quot;);
+        end
+        // =====================================================
+        // TEST 7 : OVERFLOW
+        // =====================================================
+        $display(&quot;&quot;);
+        $display(&quot;==============================================&quot;);
+        $display(&quot;TEST 7 : OVERFLOW&quot;);
+        $display(&quot;==============================================&quot;);
+        wr_en = 1;
+        wr_data = 8&#39;hFF;
+        @(posedge clk);
+        #1;
+        if (overflow == 1) begin
+
+            $display(&quot;OVERFLOW PASS&quot;);
+        end
+        else begin
+            $display(&quot;OVERFLOW FAIL&quot;);
+        end
+        @(negedge clk);
+        wr_en = 0;
+        // =====================================================
+        // TEST 8 : READ ALL 16 VALUES
+        // =====================================================
+        $display(&quot;&quot;);
+        $display(&quot;==============================================&quot;);
+        $display(&quot;TEST 8 : FIFO ORDER AFTER FULL&quot;);
+        $display(&quot;==============================================&quot;);
+        fifo_read(8&#39;h01);
+        fifo_read(8&#39;h02);
+        fifo_read(8&#39;h03);
+        fifo_read(8&#39;h04);
+        fifo_read(8&#39;h05);
+        fifo_read(8&#39;h06);
+        fifo_read(8&#39;h07);
+        fifo_read(8&#39;h08);
+        fifo_read(8&#39;h09);
+        fifo_read(8&#39;h0A);
+        fifo_read(8&#39;h0B);
+        fifo_read(8&#39;h0C);
+        fifo_read(8&#39;h0D);
+
+        fifo_read(8&#39;h0E);
+        fifo_read(8&#39;h0F);
+        fifo_read(8&#39;h10);
+        // =====================================================
+        // TEST 9 : SIMULTANEOUS READ AND WRITE
+        // =====================================================
+        $display(&quot;&quot;);
+        $display(&quot;==============================================&quot;);
+        $display(&quot;TEST 9 : SIMULTANEOUS READ / WRITE&quot;);
+        $display(&quot;==============================================&quot;);
+
+        // Put four values into FIFO
+        fifo_write(8&#39;h11);
+        fifo_write(8&#39;h22);
+        fifo_write(8&#39;h33);
+        fifo_write(8&#39;h44);
+        // Read and write at the same time
+        @(negedge clk);
+        wr_en = 1;
+        rd_en = 1;
+        wr_data = 8&#39;h55;
+        @(posedge clk);
+        #1;
+        if (rd_data == 8&#39;h11) begin
+            $display(&quot;SIMULTANEOUS R/W PASS&quot;);
+        end
+        else begin
+
+            $display(
+                &quot;SIMULTANEOUS R/W FAIL : Expected = 11, Received = %h&quot;,
+                rd_data
+            );
+        end
+        @(negedge clk);
+        wr_en = 0;
+        rd_en = 0;
+        // Read remaining values
+        fifo_read(8&#39;h22);
+        fifo_read(8&#39;h33);
+        fifo_read(8&#39;h44);
+        fifo_read(8&#39;h55);
+        // =====================================================
+        // TEST 10 : BURST OPERATION
+        // =====================================================
+        $display(&quot;&quot;);
+        $display(&quot;==============================================&quot;);
+        $display(&quot;TEST 10 : BURST OPERATION&quot;);
+        $display(&quot;==============================================&quot;);
+        fifo_write(8&#39;hA0);
+        fifo_write(8&#39;hA1);
+        fifo_write(8&#39;hA2);
+        fifo_write(8&#39;hA3);
+        fifo_write(8&#39;hA4);
+        fifo_write(8&#39;hA5);
+        fifo_write(8&#39;hA6);
+
+        fifo_write(8&#39;hA7);
+        $display(&quot;BURST WRITE COMPLETED&quot;);
+        fifo_read(8&#39;hA0);
+        fifo_read(8&#39;hA1);
+        fifo_read(8&#39;hA2);
+        fifo_read(8&#39;hA3);
+        fifo_read(8&#39;hA4);
+        fifo_read(8&#39;hA5);
+        fifo_read(8&#39;hA6);
+        fifo_read(8&#39;hA7);
+        $display(&quot;BURST READ COMPLETED&quot;);
+        // =====================================================
+        // TEST 11 : RANDOM DATA
+        // =====================================================
+        $display(&quot;&quot;);
+        $display(&quot;==============================================&quot;);
+        $display(&quot;TEST 11 : RANDOM DATA&quot;);
+        $display(&quot;==============================================&quot;);
+        // Generate random values
+        for (i = 0; i &lt; 8; i = i + 1) begin
+            random_data[i] = $random;
+        end
+        // Write random values
+        for (i = 0; i &lt; 8; i = i + 1) begin
+            fifo_write(random_data[i]);
+        end
+        $display(&quot;RANDOM WRITE COMPLETED&quot;);
+
+        // Read random values
+        for (i = 0; i &lt; 8; i = i + 1) begin
+            fifo_read(random_data[i]);
+        end
+        $display(&quot;RANDOM READ COMPLETED&quot;);
+        // =====================================================
+        // TEST 12 : FINAL EMPTY CHECK
+        // =====================================================
+
+        $display(&quot;&quot;);
+        $display(&quot;==============================================&quot;);
+        $display(&quot;TEST 12 : FINAL EMPTY CHECK&quot;);
+        $display(&quot;==============================================&quot;);
+        @(negedge clk);
+        if (empty == 1) begin
+            $display(&quot;FINAL EMPTY PASS&quot;);
+        end
+        else begin
+            $display(&quot;FINAL EMPTY FAIL&quot;);
+        end
+        // =====================================================
+        // SIMULATION COMPLETE
+        // =====================================================
+        $display(&quot;&quot;);
+        $display(&quot;==============================================&quot;);
+        $display(&quot;ALL FIFO SIMULATION TESTS COMPLETED&quot;);
+
+        $display(&quot;==============================================&quot;);
+        #20;
+        $finish;
+    end
+endmodule
